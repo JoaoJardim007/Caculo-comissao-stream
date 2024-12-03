@@ -24,7 +24,8 @@ st.markdown("""
 
 # Cabeçalho com Logo
 logo_url = "https://pages.greatpages.com.br/lp.mundobiblico.com/1732818196/imagens/desktop/424273_1_17045703666599ae02ed082902047719.png"
-st.sidebar.image(logo_url, use_container_width=True)
+st.sidebar.image(logo_url)  # Removido use_container_width=True
+
 
 # Função para leitura e limpeza de dados
 def read_and_clean_data(uploaded_file):
