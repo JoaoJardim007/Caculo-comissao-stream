@@ -24,8 +24,7 @@ st.markdown("""
 
 # Cabeçalho com Logo
 logo_url = "https://pages.greatpages.com.br/lp.mundobiblico.com/1732818196/imagens/desktop/424273_1_17045703666599ae02ed082902047719.png"
-st.sidebar.image(logo_url)  # Removido use_container_width=True
-
+st.sidebar.image(logo_url)  # Mantendo o tamanho original da imagem
 
 # Função para leitura e limpeza de dados
 def read_and_clean_data(uploaded_file):
@@ -47,7 +46,7 @@ def read_and_clean_data(uploaded_file):
     df['Conteúdo'] = df['Conteúdo'].fillna('Desconhecido').str.strip()
     df['Fonte'] = df['Fonte'].fillna('Desconhecido').str.strip()
 
-    # Uniformização de nomes para evitar duplicatas
+    # Uniformização de nomes
     df['Origem'] = df['Origem'].replace({
         'joao-vendeu': 'João',
         'joao_vendeu?utm_source=João': 'João',
@@ -64,7 +63,7 @@ def read_and_clean_data(uploaded_file):
 
     return df
 
-# Função para determinar a taxa de comissão de acordo com a receita
+# Função para determinar a taxa de comissão
 def get_commission_rate(vendedor, receita):
     if vendedor == 'João':
         if receita <= 15000:
@@ -96,9 +95,7 @@ def calculate_commissions(df, api_cost):
     joao_mask = df_commission['Origem'] == 'João'
     total_receita_joao = df_commission.loc[joao_mask, 'Receita'].sum()
     if total_receita_joao > 0:
-        # Calcular a proporção de cada venda de João
         df_commission.loc[joao_mask, 'Proporcao'] = df_commission.loc[joao_mask, 'Receita'] / total_receita_joao
-        # Deduzir o custo proporcionalmente
         df_commission.loc[joao_mask, 'Receita'] -= df_commission.loc[joao_mask, 'Proporcao'] * api_cost
     else:
         df_commission.loc[joao_mask, 'Proporcao'] = 0
@@ -109,22 +106,23 @@ def calculate_commissions(df, api_cost):
     # Calcular a receita total por vendedor (após dedução)
     receita_por_vendedor = df_commission.groupby('Origem')['Receita'].sum().reset_index()
 
-    # Calcular a taxa de comissão para cada vendedor com base na receita total
+    # Calcular a taxa de comissão para cada vendedor
     receita_por_vendedor['Taxa Comissão'] = receita_por_vendedor.apply(lambda row: get_commission_rate(row['Origem'], row['Receita']), axis=1)
 
-    # Merge para adicionar a taxa de comissão a cada venda
+    # Adicionar a taxa de comissão a cada venda
     df_commission = df_commission.merge(receita_por_vendedor[['Origem', 'Taxa Comissão']], on='Origem', how='left')
 
-    # Calcular a comissão para cada venda
+    # Calcular a comissão de cada venda
     df_commission['Comissão'] = df_commission['Receita'] * df_commission['Taxa Comissão']
 
-    # Resumir a comissão total por vendedor
+    # Comissões totais por vendedor
     total_commission = df_commission.groupby('Origem')['Comissão'].sum().reset_index()
 
     return df_commission, total_commission
 
 def main():
     st.title('💹 Dashboard de Vendas e Comissões')
+    st.markdown("Bem-vindo(a) ao seu painel de controle! Aqui você pode analisar as vendas, comissões e desempenho das campanhas. Ajuste os filtros na barra lateral conforme necessário.")
     st.markdown("---")
 
     # Sidebar - Carregamento de Dados
@@ -156,35 +154,81 @@ def main():
         total_vendas = df_filtered['Vendas'].sum()
         ticket_medio = total_receita / total_vendas if total_vendas else 0
 
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("💰 Receita Total", f"R$ {total_receita:,.2f}")
-        col2.metric("🛒 Total de Vendas", f"{total_vendas}")
-        col3.metric("🎯 Ticket Médio", f"R$ {ticket_medio:,.2f}")
-        col4.metric("💵 Comissão Total", f"R$ {df_commission['Comissão'].sum():,.2f}")
+        col_metrics = st.columns(4)
+        col_metrics[0].metric("💰 Receita Total", f"R$ {total_receita:,.2f}")
+        col_metrics[1].metric("🛒 Total de Vendas", f"{total_vendas}")
+        col_metrics[2].metric("🎯 Ticket Médio", f"R$ {ticket_medio:,.2f}")
+        col_metrics[3].metric("💵 Comissão Total", f"R$ {df_commission['Comissão'].sum():,.2f}")
 
         st.markdown("---")
 
-        # Exibição das Comissões por Vendedor
+        # Comissões por Vendedor
         st.subheader('Comissões por Vendedor')
+        st.write("Abaixo, você pode ver a soma total de comissões geradas por cada vendedor após a dedução dos custos da API do WhatsApp.")
         st.dataframe(total_commission.style.format({'Comissão': 'R$ {:,.2f}'}))
 
-        # Gráfico de Comissões por Vendedor
-        fig_commission = px.bar(
-            total_commission, 
-            x='Origem', y='Comissão', 
-            color='Origem', 
-            text_auto=True, 
-            title='Comissões por Vendedor',
-            color_discrete_sequence=px.colors.qualitative.Dark2
+        # Total de Vendas (Quantidade) por Vendedor
+        vendas_por_vendedor = df_filtered.groupby('Origem')['Vendas'].sum().reset_index()
+
+        # Gráficos lado a lado (Comissões e Vendas em Quantidade)
+        col_graficos = st.columns(2)
+
+        with col_graficos[0]:
+            st.write("**Gráfico: Comissões por Vendedor**")
+            fig_commission = px.bar(
+                total_commission, 
+                x='Origem', y='Comissão', 
+                color='Origem', 
+                text_auto=True, 
+                title='Comissões por Vendedor',
+                color_discrete_sequence=px.colors.qualitative.Dark2
+            )
+            fig_commission.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig_commission, use_container_width=True)
+
+        with col_graficos[1]:
+            st.write("**Gráfico: Vendas (Quantidade) por Vendedor**")
+            fig_vendas = px.bar(
+                vendas_por_vendedor, 
+                x='Origem', y='Vendas', 
+                color='Origem', 
+                text_auto=True,
+                title='Vendas por Vendedor (Quantidade)',
+                color_discrete_sequence=px.colors.qualitative.Prism
+            )
+            fig_vendas.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig_vendas, use_container_width=True)
+
+        # Nova Seção: Receita Total (R$) por Vendedor
+        st.markdown("---")
+        st.subheader('Receita Total por Vendedor (R$)')
+        st.write("Aqui você pode visualizar o valor total em reais das vendas (Receita) de cada vendedor, após a aplicação dos filtros e dedução de custos da API para o João.")
+        receita_vendedor = df_filtered.groupby('Origem')['Receita'].sum().reset_index().sort_values('Receita', ascending=False)
+        st.dataframe(receita_vendedor.style.format({'Receita': 'R$ {:,.2f}'}))
+
+        fig_receita_vendedor = px.bar(
+            receita_vendedor,
+            x='Origem',
+            y='Receita',
+            color='Origem',
+            text='Receita',
+            title='Receita por Vendedor (R$)',
+            color_discrete_sequence=px.colors.qualitative.Set2
         )
-        fig_commission.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig_commission, use_container_width=True)
+        fig_receita_vendedor.update_traces(textposition='inside', texttemplate='%{text:.2f}')
+        fig_receita_vendedor.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig_receita_vendedor, use_container_width=True)
 
-        # Tabela Detalhada de Comissões
+        # Detalhes das Comissões
         with st.expander("Ver Detalhes das Comissões"):
-            st.dataframe(df_commission[['Origem', 'Receita', 'Taxa Comissão', 'Comissão']].style.format({'Receita': 'R$ {:,.2f}', 'Comissão': 'R$ {:,.2f}', 'Taxa Comissão': '{:.2%}'}))
+            st.write("Aqui estão os detalhes de cada venda, já considerando a dedução do custo da API no caso do João.")
+            st.dataframe(df_commission[['Origem', 'Receita', 'Taxa Comissão', 'Comissão']].style.format({
+                'Receita': 'R$ {:,.2f}',
+                'Comissão': 'R$ {:,.2f}',
+                'Taxa Comissão': '{:.2%}'
+            }))
 
-        # Opção para baixar o relatório de comissões
+        # Download do relatório de comissões
         @st.cache_data
         def convert_df(df):
             return df.to_csv(index=False).encode('utf-8')
@@ -201,11 +245,15 @@ def main():
 
         # Análise de Campanhas mais Eficientes
         st.subheader('Campanhas mais Eficientes')
+        st.write("A tabela abaixo mostra quais campanhas geram mais receita e qual é o ticket médio por venda.")
         eficiencia_campanha = df_filtered.groupby('Campanha').agg({'Receita': 'sum', 'Vendas': 'sum'}).reset_index()
         eficiencia_campanha['Ticket Médio'] = eficiencia_campanha['Receita'] / eficiencia_campanha['Vendas']
-        st.dataframe(eficiencia_campanha.sort_values('Receita', ascending=False).style.format({'Receita': 'R$ {:,.2f}', 'Ticket Médio': 'R$ {:,.2f}'}))
+        st.dataframe(eficiencia_campanha.sort_values('Receita', ascending=False).style.format({
+            'Receita': 'R$ {:,.2f}',
+            'Ticket Médio': 'R$ {:,.2f}'
+        }))
 
-        # Gráfico de Campanhas
+        st.write("**Gráfico: Receita por Campanha**")
         fig_campanhas = px.bar(
             eficiencia_campanha, 
             x='Campanha', 
